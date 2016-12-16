@@ -11,6 +11,9 @@ import requests
 import optparse
 import uuid
 
+from node import Node
+from OutputManager import OutputManager
+
 # Get arguments
 parser = optparse.OptionParser()
 # parser.add_option('-s', '--silent',
@@ -33,7 +36,9 @@ BASE_PORT = 41000
 DISCOVERY_PORT = 42000
 
 # global variables
-UUID = ''
+Id = ''
+nodes = []
+threads = []
 
 def log(log, level=1):
 	if level == 0 or debug:
@@ -42,9 +47,19 @@ def log(log, level=1):
 def loop():
 	while True:
 		log("Loop Starting")
-		time.sleep(1)
+
+		nodes.append(Node(uuid.uuid4(), "192.168.0.1"))
+		nodes.append(Node(uuid.uuid4(), "192.168.0.2"))
+		nodes.append(Node(uuid.uuid4(), "192.168.0.3"))
+		nodes.append(Node(uuid.uuid4(), "192.168.0.4"))
+		nodes.append(Node(uuid.uuid4(), "192.168.0.5"))
+
+		output_manger.set_nodes(nodes)
+
+		time.sleep(15)
 
 def setup():
+	global output_manger
 	log("Setup Starting")
 
 	# Capture exit signals and run cleanup
@@ -52,11 +67,18 @@ def setup():
 		signal.signal(sig, cleanup)
 
 	# Generate ID
-	UUID = uuid.uuid4()
-	log("UUID generated: " + str(UUID))
+	Id = uuid.uuid4()
+	log("UUID generated: " + str(Id))
+
+	# Start Output Manager
+	output_manger = OutputManager()
+	output_manger.start()
+	threads.append(output_manger)
 
 def cleanup(signal, frame):
 	log("Cleanup Starting")
+	for t in threads:
+		t.stop()
 	sys.exit(0)
 
 

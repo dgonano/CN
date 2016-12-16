@@ -1,0 +1,6 @@
+*.pyc
+
+#Mac Stuff
+._*
+*DS_Store*
+
