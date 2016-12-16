@@ -9,6 +9,7 @@ import signal
 import threading
 import requests
 import optparse
+import uuid
 
 # Get arguments
 parser = optparse.OptionParser()
@@ -31,21 +32,28 @@ debug = cmdopts.debug
 BASE_PORT = 41000
 DISCOVERY_PORT = 42000
 
-def log(log):
-	if debug:
-		print(log)
+# global variables
+UUID = ''
+
+def log(log, level=1):
+	if level == 0 or debug:
+		print(time.asctime() + "    " + log)
 
 def loop():
 	while True:
 		log("Loop Starting")
 		time.sleep(1)
 
-
 def setup():
 	log("Setup Starting")
+
 	# Capture exit signals and run cleanup
 	for sig in (signal.SIGABRT, signal.SIGILL, signal.SIGINT, signal.SIGSEGV, signal.SIGTERM):
 		signal.signal(sig, cleanup)
+
+	# Generate ID
+	UUID = uuid.uuid4()
+	log("UUID generated: " + str(UUID))
 
 def cleanup(signal, frame):
 	log("Cleanup Starting")
@@ -53,7 +61,7 @@ def cleanup(signal, frame):
 
 
 if __name__ == "__main__":
-	print("Setting up Communication Node...")
+	log("Setting up Communication Node...", level=0)
 	setup()
-	print("Starting Communication Node...")
+	log("Starting Communication Node...", level=0)
 	loop()
