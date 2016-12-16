@@ -30,11 +30,8 @@ class DiscoveryService(threading.Thread):
         s.setsockopt(SOL_SOCKET,SO_REUSEPORT, 1)
         s.bind(('', self.port))
 
-        while True:
+        while not self.shutdown:
             new = True
-            # Shutdown if required
-            if self.shutdown:
-                return
 
             data, addr = s.recvfrom(1024) #wait for a packet
             if (data == str(self.Id)):
@@ -50,6 +47,8 @@ class DiscoveryService(threading.Thread):
             current_time = time.mktime(time.localtime())
             for n in list(self.nodes):
                 if (current_time - time.mktime(n.get_time()) > 30):
+                    # Stop the stats thread for that Node and remove it
+                    n.shutdown_stats()
                     self.nodes.remove(n)
 
             # New node, add it to the list. 
@@ -76,7 +75,6 @@ class DiscoveryService(threading.Thread):
                 loop = 0
                 data = str(self.Id)
                 s.sendto(data, ('<broadcast>', self.port))
-                # print("Sending Service Announcement")
             
             time.sleep(1)
 

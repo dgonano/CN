@@ -51,7 +51,9 @@ def loop():
 	while True:
 		log("Main Loop Starting")
 
+		# Get latest set of Nodes
 		nodes = discovery_service.getNodes()
+		# update the OutputmManager
 		output_manger.setNodes(nodes)
 
 		time.sleep(1)
