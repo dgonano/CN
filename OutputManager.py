@@ -4,10 +4,11 @@ import time
 from node import Node
 
 class OutputManager(threading.Thread):
-    # Manages the output of 
+    # Manages the output of nodes and statistics
 
     # Attributes:
     #   nodes: A list of Nodes.
+    #   shutdown: If the thread should terminate
 
     def __init__(self, nodes=[]):
         threading.Thread.__init__(self)
@@ -28,14 +29,15 @@ class OutputManager(threading.Thread):
 
             time.sleep(1)
 
-    def get_nodes(self):
+    def getNodes(self):
         return self.nodes
 
-    def set_nodes(self, nodes):
+    def setNodes(self, nodes):
         self.nodes = nodes
 
     def update(self):
-        print '*' * 15
+        print '*' * 100
+        print("     UUID                                   IP Address  Time                     latency, up, down")
         for i in self.nodes:
             print(i.to_string())
 

@@ -13,14 +13,15 @@ import uuid
 
 from node import Node
 from OutputManager import OutputManager
+from DiscoveryService import DiscoveryService
 
 # Get arguments
 parser = optparse.OptionParser()
-# parser.add_option('-s', '--silent',
-# 		dest="silent",
-# 		action="store_true",
-# 		default=False,
-# 		help="don't display any messages")
+parser.add_option('-s', '--silent',
+		dest="silent",
+		action="store_true",
+		default=False,
+		help="don't display any messages")
 parser.add_option('-d', '--debug',
 		dest="debug",
 		action="store_true",
@@ -28,7 +29,7 @@ parser.add_option('-d', '--debug',
 		help="display debug messages")
 
 cmdopts, cmdargs = parser.parse_args()
-# silent = cmdopts.silent
+silent = cmdopts.silent
 debug = cmdopts.debug
 
 # constants
@@ -41,25 +42,23 @@ nodes = []
 threads = []
 
 def log(log, level=1):
+	if silent:
+		return
 	if level == 0 or debug:
 		print(time.asctime() + "    " + log)
 
 def loop():
 	while True:
-		log("Loop Starting")
+		log("Main Loop Starting")
 
-		nodes.append(Node(uuid.uuid4(), "192.168.0.1"))
-		nodes.append(Node(uuid.uuid4(), "192.168.0.2"))
-		nodes.append(Node(uuid.uuid4(), "192.168.0.3"))
-		nodes.append(Node(uuid.uuid4(), "192.168.0.4"))
-		nodes.append(Node(uuid.uuid4(), "192.168.0.5"))
+		nodes = discovery_service.getNodes()
+		output_manger.setNodes(nodes)
 
-		output_manger.set_nodes(nodes)
-
-		time.sleep(15)
+		time.sleep(1)
 
 def setup():
 	global output_manger
+	global discovery_service
 	log("Setup Starting")
 
 	# Capture exit signals and run cleanup
@@ -68,17 +67,25 @@ def setup():
 
 	# Generate ID
 	Id = uuid.uuid4()
-	log("UUID generated: " + str(Id))
+	log("UUID generated: " + str(Id), level=0)
+
+	# Start Descovery Service
+	discovery_service = DiscoveryService(Id)
+	discovery_service.daemon = True
+	discovery_service.start()
+	threads.append(discovery_service)
 
 	# Start Output Manager
 	output_manger = OutputManager()
+	output_manger.daemon = True
 	output_manger.start()
 	threads.append(output_manger)
 
 def cleanup(signal, frame):
-	log("Cleanup Starting")
+	log("Shutting down Communication Node...", level=0)
 	for t in threads:
 		t.stop()
+	t.join(5)
 	sys.exit(0)
 
 
