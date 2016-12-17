@@ -14,6 +14,7 @@ import uuid
 from node import Node
 from OutputManager import OutputManager
 from DiscoveryService import DiscoveryService
+from BandwidthServer import BandwidthServer
 
 # Get arguments
 parser = optparse.OptionParser()
@@ -33,8 +34,8 @@ silent = cmdopts.silent
 debug = cmdopts.debug
 
 # constants
-BASE_PORT = 41000
 DISCOVERY_PORT = 42000
+BASE_PORT = 41000
 
 # global variables
 Id = ''
@@ -53,6 +54,8 @@ def loop():
 
 		# Get latest set of Nodes
 		nodes = discovery_service.getNodes()
+		# Update Bandwidth Measurments
+		nodes = bandwidth_server.update_nodes(nodes)
 		# update the OutputmManager
 		output_manger.setNodes(nodes)
 
@@ -61,6 +64,7 @@ def loop():
 def setup():
 	global output_manger
 	global discovery_service
+	global bandwidth_server
 	log("Setup Starting")
 
 	# Capture exit signals and run cleanup
@@ -71,8 +75,18 @@ def setup():
 	Id = uuid.uuid4()
 	log("UUID generated: " + str(Id), level=0)
 
+	# Start Bandwidth Server
+	bandwidth_server = BandwidthServer(BASE_PORT)
+	bandwidth_server.daemon = True
+	bandwidth_server.start()
+	threads.append(bandwidth_server)
+
+	while not bandwidth_server.is_started():
+		time.sleep(0.1)
+	bandwidth_port = bandwidth_server.get_port()
+
 	# Start Descovery Service
-	discovery_service = DiscoveryService(Id)
+	discovery_service = DiscoveryService(Id, bandwidth_port, DISCOVERY_PORT)
 	discovery_service.daemon = True
 	discovery_service.start()
 	threads.append(discovery_service)
@@ -82,6 +96,8 @@ def setup():
 	output_manger.daemon = True
 	output_manger.start()
 	threads.append(output_manger)
+
+	
 
 def cleanup(signal, frame):
 	log("Shutting down Communication Node...", level=0)

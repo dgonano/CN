@@ -12,14 +12,15 @@ class DiscoveryService(threading.Thread):
     #   port: UDP port to broadcast too
     #   shutdown: If the thread should terminate
     #   nodes: List of currently known nodes
+    #   bandwidth_port: Port to broadcast to other nodes
 
-    def __init__(self, Id, port=42000):
+    def __init__(self, Id, bandwidth_port, port=42000):
         threading.Thread.__init__(self)
         self.port = port
         self.Id = Id
+        self.bandwidth_port = bandwidth_port
         self.shutdown = False
         self.nodes = []
-        self.threads = []
 
     def run(self):
         # Start broadcast thread
@@ -34,12 +35,13 @@ class DiscoveryService(threading.Thread):
             new = True
 
             data, addr = s.recvfrom(1024) #wait for a packet
-            if (data == str(self.Id)):
+            datas = data.split(",", 2)
+            if (datas[0] == str(self.Id)):
                 new = False
             else:
                 for n in self.nodes:
                     # If it's already in the list, just update the time.
-                    if (data == n.get_Id()):
+                    if (datas[0] == n.get_Id()):
                         n.set_time(time.localtime())
                         new = False
             
@@ -53,7 +55,7 @@ class DiscoveryService(threading.Thread):
 
             # New node, add it to the list. 
             if new:
-                self.nodes.append(Node(data, addr[0], time.localtime()))
+                self.nodes.append(Node(datas[0], addr[0], int(datas[1]), time.localtime()))
 
     def getNodes(self):
         return self.nodes
@@ -62,18 +64,14 @@ class DiscoveryService(threading.Thread):
         s = socket(AF_INET, SOCK_DGRAM) #create UDP socket
         s.bind(('', 0))
         s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) #this is a broadcast socket
-        # my_ip= gethostbyname(gethostname()) #get our IP. Be careful if you have multiple network interfaces or IPs
 
         loop = 0
-        while True:
-            # Shutdown if required
-            if self.shutdown:
-                return
+        while not self.shutdown:
             loop = loop + 1
 
             if (loop == 5):
                 loop = 0
-                data = str(self.Id)
+                data = str(self.Id) + "," + str(self.bandwidth_port)
                 s.sendto(data, ('<broadcast>', self.port))
             
             time.sleep(1)
