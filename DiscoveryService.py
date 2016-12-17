@@ -1,85 +1,102 @@
+"""This module provides a Discovery Service to help discover
+Nodes on the network
+"""
+
 import threading
 import time
-import uuid
-from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, gethostbyname, gethostname, SO_REUSEPORT
+from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, \
+    SO_BROADCAST, SO_REUSEPORT
 
-from node import Node
+from Node import Node
+
+# How often to broadcst in seconds
+BROADCAST_INTERVAL_S = 5
+# Default discovry port
+DEFAULT_BROADCAST_PORT = 42000
+# Time before a node is declared as no longer avalible in seconds
+NODE_TIMEOUT_S = 30
 
 class DiscoveryService(threading.Thread):
-    # Manages the discovery service
+    """This Module sets up and manages the discovery service
 
-    # Attributes:
-    #   port: UDP port to broadcast too
-    #   shutdown: If the thread should terminate
-    #   nodes: List of currently known nodes
+    Attributes:
+      uid: The uuid of this connumication node
+      port: UDP port to broadcast too
+      shutdown: If the thread should terminate
+      nodes: List of currently known nodes
+    """
 
-    def __init__(self, Id, port=42000):
+    def __init__(self, uid, port=DEFAULT_BROADCAST_PORT):
         threading.Thread.__init__(self)
         self.port = port
-        self.Id = Id
+        self.uid = uid
         self.shutdown = False
         self.nodes = []
-        self.threads = []
 
     def run(self):
+        """Start the DiscoveryService"""
         # Start broadcast thread
         threading.Thread(target=self.broadcast, args=[]).start()
 
         # Setup recieving socket
-        s = socket(AF_INET, SOCK_DGRAM)
-        s.setsockopt(SOL_SOCKET,SO_REUSEPORT, 1)
-        s.bind(('', self.port))
+        sock = socket(AF_INET, SOCK_DGRAM)
+        sock.setsockopt(SOL_SOCKET, SO_REUSEPORT, 1)
+        sock.bind(('', self.port))
 
+        # continually monitor for incoming service broadcasts
         while not self.shutdown:
             new = True
 
-            data, addr = s.recvfrom(1024) #wait for a packet
-            if (data == str(self.Id)):
+            # wait for a packet
+            data, addr = sock.recvfrom(1024)
+            # Check if it's from this node first
+            if data == str(self.uid):
                 new = False
             else:
-                for n in self.nodes:
+                for node in self.nodes:
                     # If it's already in the list, just update the time.
-                    if (data == n.get_Id()):
-                        n.set_time(time.localtime())
+                    if data == node.get_id():
+                        node.set_time(time.localtime())
                         new = False
-            
+
             # If it's timed out, remove it.
             current_time = time.mktime(time.localtime())
-            for n in list(self.nodes):
-                if (current_time - time.mktime(n.get_time()) > 30):
+            for node in list(self.nodes):
+                if current_time - time.mktime(node.get_time()) > NODE_TIMEOUT_S:
                     # Stop the stats thread for that Node and remove it
-                    n.shutdown_stats()
-                    self.nodes.remove(n)
+                    node.shutdown_stats()
+                    self.nodes.remove(node)
 
-            # New node, add it to the list. 
+            # New node, add it to the list.
             if new:
                 self.nodes.append(Node(data, addr[0], time.localtime()))
 
-    def getNodes(self):
+    def get_nodes(self):
+        """Return currently known nodes"""
         return self.nodes
 
+    # Continually braodcast UPD notification packets for other nodes
     def broadcast(self):
-        s = socket(AF_INET, SOCK_DGRAM) #create UDP socket
-        s.bind(('', 0))
-        s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) #this is a broadcast socket
-        # my_ip= gethostbyname(gethostname()) #get our IP. Be careful if you have multiple network interfaces or IPs
+        """Method to run the broadcast part of the service, run as a thread"""
+        sock = socket(AF_INET, SOCK_DGRAM) #create UDP socket
+        sock.bind(('', 0))
+        sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) #this is a broadcast socket
 
         loop = 0
-        while True:
-            # Shutdown if required
-            if self.shutdown:
-                return
+        while not self.shutdown:
             loop = loop + 1
 
-            if (loop == 5):
+            if loop == BROADCAST_INTERVAL_S:
                 loop = 0
-                data = str(self.Id)
-                s.sendto(data, ('<broadcast>', self.port))
-            
+                data = str(self.uid)
+                # Try to send it
+                try:
+                    sock.sendto(data, ('<broadcast>', self.port))
+                except:
+                    pass
+
             time.sleep(1)
 
     def stop(self):
+        """Signal the Discovery service to shutdown"""
         self.shutdown = True
-
-    def stopped(self):
-        return self.shutdown
