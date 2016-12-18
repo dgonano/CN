@@ -5,9 +5,9 @@ import threading
 import time
 
 # The time interval in seconds which updates the display (prints out to console)
-DISPLAY_UPDATE_INTERVAL_S = 15
+DISPLAY_UPDATE_INTERVAL_S = 5
 
-class OutputManager(threading.Thread):
+class OutputManager(object):
     """Manages the output of nodes and statistics
 
     Attributes:
@@ -16,21 +16,10 @@ class OutputManager(threading.Thread):
     """
 
     def __init__(self, nodes=[]):
-        threading.Thread.__init__(self)
         self.nodes = nodes
         self.shutdown = False
-
-    def run(self):
-        """Start the Output Manager running"""
-        loop = 0
-        while not self.shutdown:
-            loop = loop + 1
-
-            if loop == DISPLAY_UPDATE_INTERVAL_S:
-                loop = 0
-                self.update()
-
-            time.sleep(1)
+        self.timer_thread = threading.Timer(DISPLAY_UPDATE_INTERVAL_S, self.auto_update)
+        self.timer_thread.start()
 
     def get_nodes(self):
         """Return Nodes the Output Manager knows about"""
@@ -48,6 +37,12 @@ class OutputManager(threading.Thread):
         for node in self.nodes:
             print(node.to_string())
 
+    def auto_update(self):
+        """Timer to auto-update the display if no other activity"""
+        self.timer_thread = threading.Timer(DISPLAY_UPDATE_INTERVAL_S, self.auto_update)
+        self.timer_thread.start()
+        self.update()
+
     def stop(self):
         """Signal the Output Manager to shutdown"""
-        self.shutdown = True
+        self.timer_thread.cancel()

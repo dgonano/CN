@@ -48,8 +48,8 @@ debug = cmdopts.debug
 uid = ''
 # List of known Nodes
 nodes = []
-# List of threads to shutdown at cleanup
-threads = []
+# List of services to shutdown at cleanup
+services = []
 # The output manager
 output_manger = None
 # The discovery service
@@ -66,23 +66,17 @@ def log(log_line, level=1):
 
 def loop():
     """Main program on the Conenction Node"""
-    global nodes                 # pylint: disable=C0103
     while True:
-        log("Main Loop Starting")
-
-        # Get latest set of Nodes
-        nodes = discovery_service.get_nodes()
-        # update the OutputmManager
-        output_manger.set_nodes(nodes)
-
-        time.sleep(1)
+        # Sleep so we can capture exit signal
+        time.sleep(100)
 
 def setup():
     """Setup the Connection Node"""
     log("Setup Starting")
     global discovery_service    # pylint: disable=C0103
     global output_manger        # pylint: disable=C0103
-    global uid                     # pylint: disable=C0103
+    global uid                  # pylint: disable=C0103
+    global nodes
 
     # Capture exit signals and run cleanup
     for sig in (signal.SIGABRT, signal.SIGILL, signal.SIGINT, \
@@ -93,28 +87,24 @@ def setup():
     uid = uuid.uuid4()
     log("UUID generated: " + str(uid), level=0)
 
-    # Start Descovery Service
-    discovery_service = DiscoveryService(uid, DISCOVERY_PORT)
-    discovery_service.daemon = True
-    discovery_service.start()
-    threads.append(discovery_service)
+    # Create Descovery Service
+    discovery_service = DiscoveryService(uid, nodes, DISCOVERY_PORT)
+    services.append(discovery_service)
 
-    # Start Output Manager
-    output_manger = OutputManager()
-    output_manger.daemon = True
-    output_manger.start()
-    threads.append(output_manger)
+    # Create Output Manager
+    output_manger = OutputManager(nodes)
+    services.append(output_manger)
 
 def cleanup(signal, frame):
-    """Ceanup all threads of the Connection Node"""
+    """Ceanup all services of the Connection Node"""
     log("Shutting down Communication Node...", level=0)
-    for thread in threads:
-        thread.stop()
+    for service in services:
+        service.stop()
     sys.exit(0)
 
 
 if __name__ == "__main__":
     log("Setting up Communication Node...", level=0)
     setup()
-    log("Starting Communication Node...", level=0)
+    log("Communication Started", level=0)
     loop()

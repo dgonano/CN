@@ -15,8 +15,10 @@ BROADCAST_INTERVAL_S = 5
 DEFAULT_BROADCAST_PORT = 42000
 # Time before a node is declared as no longer avalible in seconds
 NODE_TIMEOUT_S = 30
+# Interval that nodes validity is checked
+NODE_CHECK_INTERVAL_S = 5
 
-class DiscoveryService(threading.Thread):
+class DiscoveryService(object):
     """This Module sets up and manages the discovery service
 
     Attributes:
@@ -26,17 +28,32 @@ class DiscoveryService(threading.Thread):
       nodes: List of currently known nodes
     """
 
-    def __init__(self, uid, port=DEFAULT_BROADCAST_PORT):
-        threading.Thread.__init__(self)
-        self.port = port
-        self.uid = uid
+    def __init__(self, uid, nodes, port=DEFAULT_BROADCAST_PORT):
         self.shutdown = False
-        self.nodes = []
+        self.uid = uid
+        self.nodes = nodes
+        self.port = port
 
-    def run(self):
+        # Start a timer to remove old nodes
+        self.remove_old_nodes()
+
+        # Setup Broadcast socket with Timer
+        self.broadcast_sock = socket(AF_INET, SOCK_DGRAM) #create UDP socket
+        self.broadcast_sock.bind(('', 0))
+        self.broadcast_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+        self.broadcast()
+
+        # Setup Recieving
+        rthread = threading.Thread(target=self.listen)
+        rthread.daemon = True
+        rthread.start()
+
+    def listen(self):
         """Start the DiscoveryService"""
         # Start broadcast thread
-        threading.Thread(target=self.broadcast, args=[]).start()
+        # threading.Thread(target=self.broadcast, args=[]).start()
+
+        
 
         # Setup recieving socket
         sock = socket(AF_INET, SOCK_DGRAM)
@@ -45,58 +62,59 @@ class DiscoveryService(threading.Thread):
 
         # continually monitor for incoming service broadcasts
         while not self.shutdown:
-            new = True
-
             # wait for a packet
             data, addr = sock.recvfrom(1024)
+
             # Check if it's from this node first
             if data == str(self.uid):
-                new = False
-            else:
-                for node in self.nodes:
-                    # If it's already in the list, just update the time.
-                    if data == node.get_id():
-                        node.set_time(time.localtime())
-                        new = False
-
-            # If it's timed out, remove it.
-            current_time = time.mktime(time.localtime())
-            for node in list(self.nodes):
-                if current_time - time.mktime(node.get_time()) > NODE_TIMEOUT_S:
-                    # Stop the stats thread for that Node and remove it
-                    node.shutdown_stats()
-                    self.nodes.remove(node)
+                continue
+            # Check if it's already in the list
+            if self.update_time(data):
+                continue
 
             # New node, add it to the list.
-            if new:
-                self.nodes.append(Node(data, addr[0], time.localtime()))
+            self.nodes.append(Node(data, addr[0], time.localtime()))
+
+    def update_time(self, node_id):
+        """If the node already exits, update the time
+        Returns
+            True: If exists and updated
+            False: Doesn't exists
+        """
+        for node in self.nodes:
+            if node_id == node.get_id():
+                # It's already in the list, just update the time.
+                node.set_time(time.localtime())
+                return True
+        # Node not found
+        return False
+
+    def remove_old_nodes(self):
+        """Starts a timer that removes old nodes"""
+        self.nodes_timer = threading.Timer(NODE_CHECK_INTERVAL_S, self.remove_old_nodes)
+        self.nodes_timer.start()
+        
+        # If it's timed out, remove it.
+        current_time = time.mktime(time.localtime())
+        for node in list(self.nodes):
+            if current_time - time.mktime(node.get_time()) > NODE_TIMEOUT_S:
+                # Stop the stats thread for that Node and remove it
+                node.shutdown_stats()
+                self.nodes.remove(node)
 
     def get_nodes(self):
         """Return currently known nodes"""
         return self.nodes
 
-    # Continually braodcast UPD notification packets for other nodes
     def broadcast(self):
         """Method to run the broadcast part of the service, run as a thread"""
-        sock = socket(AF_INET, SOCK_DGRAM) #create UDP socket
-        sock.bind(('', 0))
-        sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) #this is a broadcast socket
+        self.broadcast_timer = threading.Timer(BROADCAST_INTERVAL_S, self.broadcast)
+        self.broadcast_timer.start()
 
-        loop = 0
-        while not self.shutdown:
-            loop = loop + 1
-
-            if loop == BROADCAST_INTERVAL_S:
-                loop = 0
-                data = str(self.uid)
-                # Try to send it
-                try:
-                    sock.sendto(data, ('<broadcast>', self.port))
-                except:
-                    pass
-
-            time.sleep(1)
+        self.broadcast_sock.sendto(str(self.uid), ('<broadcast>', self.port))
 
     def stop(self):
         """Signal the Discovery service to shutdown"""
         self.shutdown = True
+        self.broadcast_timer.cancel()
+        self.nodes_timer.cancel()
